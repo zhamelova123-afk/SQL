@@ -47,7 +47,7 @@ ORDER BY months ASC;
 
 -- c)среднее количество клиентов, которые совершали операции;
 SELECT AVG(clients)
-FROM( SELECT COUNT(Id_client) AS clients
+FROM( SELECT COUNT(DISTINCT Id_client) AS clients
 FROM transactions 
 GROUP BY Id_client) AS s;
 
@@ -61,7 +61,37 @@ GROUP BY months
 ORDER BY months ASC;
 
 -- e)вывести % соотношение M/F/NA в каждом месяце с их долей затрат;
-
+WITH month_stat AS (
+SELECT DATE_FORMAT(t.date_new, '%Y-%m') AS month, COUNT(DISTINCT t.ID_client) AS count_clients, COUNT(t.id_check) AS count_operations,
+SUM(t.Sum_payment) AS sum_total, AVG(t.Sum_payment) AS avg_check
+FROM transactions t
+WHERE t.date_new BETWEEN '2015-06-01' AND '2016-06-01'
+GROUP BY DATE_FORMAT(t.date_new, '%Y-%m')
+),
+year_total AS (
+SELECT SUM(sum_total) AS sum_total_year, SUM(count_operations) AS total_operations_year
+FROM month_stat
+),
+gender_distribution AS (
+SELECT DATE_FORMAT(t.date_new, '%Y-%m') AS month, SUM(DISTINCT CASE WHEN c.gender='M' THEN t.Sum_payment ELSE 0 END) AS male_spent,
+SUM(DISTINCT CASE WHEN c.gender='F' THEN t.Sum_payment ELSE 0 END) AS female_spent, 
+SUM(DISTINCT CASE WHEN c.gender IS NULL THEN t.Sum_payment ELSE 0 END) AS na_spent,
+COUNT(DISTINCT CASE WHEN c.gender='M' THEN t.ID_client ELSE NULL END) AS count_male,
+COUNT(DISTINCT CASE WHEN c.gender='F' THEN t.ID_client ELSE NULL END) AS count_female,
+COUNT(DISTINCT CASE WHEN c.gender IS NULL THEN t.ID_client ELSE NULL END) AS count_na
+FROM transactions t
+JOIN customers c ON t.ID_client=c.Id_client 
+WHERE t.date_new BETWEEN '2015-06-01' AND '2016-06-01'
+GROUP BY DATE_FORMAT(t.date_new, '%Y-%m')
+)
+SELECT ms.month, ms.avg_check AS average_check_per_month, ms.count_operations AS operations_per_month, ms.count_clients AS clients_per_month,
+ms.count_operations / yt.total_operations_year AS operation_share_per_month, ms.sum_total / yt.sum_total_year AS sum_share_per_month,
+gd.male_spent / ms.sum_total * 100 AS male_share, gd.female_spent / ms.sum_total * 100 AS female_share, gd.na_spent / ms.sum_total * 100 AS na_share,
+gd.count_male / ms.count_clients * 100 AS male_count_share , gd.count_female / ms.count_clients * 100 AS female_count_share, gd.count_na / ms.count_clients *100 AS na_count_share
+FROM month_stat ms 
+CROSS JOIN year_total yt
+JOIN gender_distribution gd ON gd.month=ms.month 
+ORDER BY ms.month;
 
 
 #3
